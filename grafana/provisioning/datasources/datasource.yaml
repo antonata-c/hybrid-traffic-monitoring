@@ -1,0 +1,13 @@
+apiVersion: 1
+
+datasources:
+  - name: PostgreSQL
+    type: postgres
+    url: db:5432
+    database: traffic_db
+    user: user
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1700
+    secureJsonData:
+      password: password
