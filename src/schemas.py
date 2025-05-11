@@ -1,13 +1,20 @@
-from pydantic import BaseModel
 from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class TrafficData(BaseModel):
+    """Схема для данных о трафике."""
     node_id: str
     node_type: str
     bandwidth: float
+    capacity_mbps: float
     latency: float
     packet_loss: float
+    switched_from: str | None
+    switch_reason: str | None
+    switch_time: float
+    switch_packet_loss: float
     timestamp: datetime
 
     class Config:
@@ -15,12 +22,6 @@ class TrafficData(BaseModel):
 
 
 class OptimizationResponse(BaseModel):
+    """Схема для ответа с рекомендациями по оптимизации."""
     message: str
-    improvement: float
-
-
-class TrafficAnalytics(BaseModel):
-    average_bandwidth: float
-    average_latency: float
-    average_packet_loss: float
-    high_latency_nodes: list[dict]
+    recommendations: list[dict]

@@ -14,6 +14,7 @@ session_factory = async_sessionmaker(autocommit=False, autoflush=False, bind=eng
 
 
 async def get_db():
+    """Предоставляет асинхронную сессию базы данных."""
     db = session_factory()
     try:
         yield db

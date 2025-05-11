@@ -1,9 +1,15 @@
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/traffic_db"
-    NETWORK_NODES: list = [
-        "fiber_node1", "fiber_node2", "sat_node1", "sat_node2", "5g_node1", "5g_node2"
-    ]
+    """Конфигурация приложения с загрузкой переменных из .env."""
+    DATABASE_URL: str
+    NETWORK_NODES: list[str]
+    TOTAL_TRAFFIC_DEMAND: float
+    DATA_SOURCE: str
+    SNMP_HOST: str
+    SNMP_PORT: int
+    SNMP_COMMUNITY: str
+
 
 settings = Settings()
