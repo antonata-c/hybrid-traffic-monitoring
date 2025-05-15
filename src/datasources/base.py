@@ -16,4 +16,3 @@ class DataSource(ABC):
         Returns:
             Список словарей с метриками трафика.
         """
-        pass

@@ -1,15 +1,14 @@
 import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Dict, List, Optional, Sequence, Tuple, Any
 
 import numpy as np
-import pandas as pd
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from enums import NetworkStatus, NodeType, TrafficType
-from models import NetworkLink, Node, Traffic
+from models import NetworkLink, Traffic
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,23 +17,23 @@ logger = logging.getLogger(__name__)
 class TrafficAnalyzer:
     """Расширенный класс для анализа данных о трафике в гибридных сетях."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.latency_thresholds = {
-            "fiber": settings.LATENCY_THRESHOLD_FIBER, 
-            "satellite": settings.LATENCY_THRESHOLD_SATELLITE, 
+            "fiber": settings.LATENCY_THRESHOLD_FIBER,
+            "satellite": settings.LATENCY_THRESHOLD_SATELLITE,
             "5G": settings.LATENCY_THRESHOLD_5G,
             "microwave": 50,
             "starlink": 200,
-            "hybrid": 100
+            "hybrid": 100,
         }
         self.packet_loss_thresholds = {
-            "fiber": 1, 
-            "satellite": 3, 
+            "fiber": 1,
+            "satellite": 3,
             "5G": 2,
             "microwave": 2,
             "starlink": 3,
-            "hybrid": 2
+            "hybrid": 2,
         }
         self.switch_time_threshold = 0.3
         self.utilization_threshold_high = settings.HIGH_UTILIZATION_THRESHOLD / 100.0
@@ -47,7 +46,7 @@ class TrafficAnalyzer:
             TrafficType.STREAMING: {"max_latency": 400, "max_jitter": 150, "max_packet_loss": 3},
             TrafficType.DATA: {"max_latency": 1000, "max_jitter": 300, "max_packet_loss": 5},
             TrafficType.IOT: {"max_latency": 500, "max_jitter": 200, "max_packet_loss": 3},
-            TrafficType.SIGNALING: {"max_latency": 100, "max_jitter": 50, "max_packet_loss": 0.5}
+            TrafficType.SIGNALING: {"max_latency": 100, "max_jitter": 50, "max_packet_loss": 0.5},
         }
 
     async def _fetch_traffic_data(self, minutes: int = 60, node_type: NodeType = None) -> Sequence[Traffic]:
@@ -78,10 +77,10 @@ class TrafficAnalyzer:
             Словарь {node_id: slope}, где slope — скорость изменения метрики (положительная = рост).
         """
         trends = {}
-        for node in set(t.node_id for t in traffic_data):
+        for node in {t.node_id for t in traffic_data}:
             node_data = sorted(
                 [t for t in traffic_data if t.node_id == node],
-                key=lambda x: x.timestamp
+                key=lambda x: x.timestamp,
             )
             if len(node_data) > 5:
                 values = [getattr(t, metric) for t in node_data]
@@ -113,18 +112,20 @@ class TrafficAnalyzer:
                         "metric": metric,
                         "value": round(value, 2),
                         "threshold": self.latency_thresholds[t.node_type],
-                        "timestamp": t.timestamp.isoformat()
-                    }
+                        "timestamp": t.timestamp.isoformat(),
+                    },
                 )
-            elif metric == "packet_loss" and value > self.packet_loss_thresholds[t.node_type] * self.anomaly_sensitivity:
+            elif (
+                metric == "packet_loss" and value > self.packet_loss_thresholds[t.node_type] * self.anomaly_sensitivity
+            ):
                 anomalies.append(
                     {
                         "node_id": t.node_id,
                         "metric": metric,
                         "value": round(value, 2),
                         "threshold": self.packet_loss_thresholds[t.node_type],
-                        "timestamp": t.timestamp.isoformat()
-                    }
+                        "timestamp": t.timestamp.isoformat(),
+                    },
                 )
             elif metric == "switch_time" and value > self.switch_time_threshold * self.anomaly_sensitivity:
                 anomalies.append(
@@ -133,8 +134,8 @@ class TrafficAnalyzer:
                         "metric": metric,
                         "value": round(value, 2),
                         "threshold": self.switch_time_threshold,
-                        "timestamp": t.timestamp.isoformat()
-                    }
+                        "timestamp": t.timestamp.isoformat(),
+                    },
                 )
             elif metric == "jitter" and hasattr(t, "jitter") and t.jitter > 100 * self.anomaly_sensitivity:
                 anomalies.append(
@@ -143,8 +144,8 @@ class TrafficAnalyzer:
                         "metric": metric,
                         "value": round(t.jitter, 2),
                         "threshold": 100,
-                        "timestamp": t.timestamp.isoformat()
-                    }
+                        "timestamp": t.timestamp.isoformat(),
+                    },
                 )
         return anomalies
 
@@ -160,10 +161,10 @@ class TrafficAnalyzer:
             Словарь {node_id: forecasted_value} с прогнозами.
         """
         forecasts = {}
-        for node in set(t.node_id for t in traffic_data):
+        for node in {t.node_id for t in traffic_data}:
             node_data = sorted(
                 [t for t in traffic_data if t.node_id == node],
-                key=lambda x: x.timestamp
+                key=lambda x: x.timestamp,
             )
             if len(node_data) >= max(steps, 10):
                 values = [getattr(t, metric) for t in node_data]
@@ -178,7 +179,7 @@ class TrafficAnalyzer:
                     forecasts[node] = round(float(forecast), 2)
                 except Exception as e:
                     logger.warning(f"Ошибка прогнозирования для узла {node}: {e}")
-                    forecasts[node] = round(sum(values[-3:]) / 3, 2)  
+                    forecasts[node] = round(sum(values[-3:]) / 3, 2)
         return forecasts
 
     @staticmethod
@@ -202,34 +203,52 @@ class TrafficAnalyzer:
 
         correlations = {}
         try:
-            correlations["bandwidth_vs_latency"] = vs_latency if not np.isnan(
-                vs_latency := round(
-                    float(np.corrcoef(bandwidth, latency, dtype=float)[0, 1]),
-                    2
+            correlations["bandwidth_vs_latency"] = (
+                vs_latency
+                if not np.isnan(
+                    vs_latency := round(
+                        float(np.corrcoef(bandwidth, latency, dtype=float)[0, 1]),
+                        2,
+                    ),
                 )
-            ) else 0.0
-            correlations["utilization_vs_packet_loss"] = vs_packet_loss if not np.isnan(
-                vs_packet_loss := round(
-                    float(np.corrcoef(utilization, packet_loss, dtype=float)[0, 1]),
-                    2
+                else 0.0
+            )
+            correlations["utilization_vs_packet_loss"] = (
+                vs_packet_loss
+                if not np.isnan(
+                    vs_packet_loss := round(
+                        float(np.corrcoef(utilization, packet_loss, dtype=float)[0, 1]),
+                        2,
+                    ),
                 )
-            ) else 0.0
-            correlations["switch_time_vs_packet_loss"] = switch_vs_packet_loss if not np.isnan(
-                switch_vs_packet_loss := round(
-                    float(np.corrcoef(switch_time, packet_loss, dtype=float)[0, 1]),
-                    2
+                else 0.0
+            )
+            correlations["switch_time_vs_packet_loss"] = (
+                switch_vs_packet_loss
+                if not np.isnan(
+                    switch_vs_packet_loss := round(
+                        float(np.corrcoef(switch_time, packet_loss, dtype=float)[0, 1]),
+                        2,
+                    ),
                 )
-            ) else 0.0
+                else 0.0
+            )
             if any(j > 0 for j in jitter):
-                correlations["jitter_vs_latency"] = jitter_vs_latency if not np.isnan(
-                    jitter_vs_latency := round(
-                        float(np.corrcoef(jitter, latency, dtype=float)[0, 1]),
-                    2
+                correlations["jitter_vs_latency"] = (
+                    jitter_vs_latency
+                    if not np.isnan(
+                        jitter_vs_latency := round(
+                            float(np.corrcoef(jitter, latency, dtype=float)[0, 1]),
+                            2,
+                        ),
+                    )
+                    else 0.0
                 )
-            ) else 0.0
         except np.linalg.LinAlgError:
-            correlations = {k: 0.0 for k in
-                            ["bandwidth_vs_latency", "utilization_vs_packet_loss", "switch_time_vs_packet_loss"]}
+            correlations = dict.fromkeys(
+                ["bandwidth_vs_latency", "utilization_vs_packet_loss", "switch_time_vs_packet_loss"],
+                0.0,
+            )
         return correlations
 
     async def get_traffic_analytics(self, node_type: NodeType | None = None, minutes: int = 60) -> dict:
@@ -263,7 +282,7 @@ class TrafficAnalyzer:
                     "avg_utilization": sum(t.bandwidth / t.capacity_mbps for t in type_traffic) / len(type_traffic),
                     "count": len(type_traffic),
                     "threshold_latency": self.latency_thresholds[node_type],
-                    "threshold_packet_loss": self.packet_loss_thresholds[node_type]
+                    "threshold_packet_loss": self.packet_loss_thresholds[node_type],
                 }
 
         bandwidth_trends = await self._calculate_trends(traffic_data, "bandwidth")
@@ -297,9 +316,12 @@ class TrafficAnalyzer:
                     "bandwidth_forecast": bandwidth_forecasts.get(node_id),
                     "latency_forecast": latency_forecasts.get(node_id),
                     "anomalies": len(
-                        [a for a in latency_anomalies + packet_loss_anomalies + switch_time_anomalies 
-                        if a["node_id"] == node_id]
-                    )
+                        [
+                            a
+                            for a in latency_anomalies + packet_loss_anomalies + switch_time_anomalies
+                            if a["node_id"] == node_id
+                        ],
+                    ),
                 }
         network_status = self._evaluate_network_status(traffic_data)
 
@@ -314,37 +336,39 @@ class TrafficAnalyzer:
                 "packet_loss_percent": round(avg_packet_loss, 2),
                 "switch_time_sec": round(avg_switch_time, 3),
                 "jitter_ms": round(avg_jitter, 2),
-                "utilization_percent": round(avg_utilization * 100, 2)
+                "utilization_percent": round(avg_utilization * 100, 2),
             },
             "node_types": node_type_data,
             "nodes_metrics": nodes_metrics,
             "trends": {
                 "bandwidth": bandwidth_trends,
                 "latency": latency_trends,
-                "packet_loss": packet_loss_trends
+                "packet_loss": packet_loss_trends,
             },
             "anomalies": {
                 "latency": latency_anomalies,
                 "packet_loss": packet_loss_anomalies,
                 "switch_time": switch_time_anomalies,
                 "jitter": jitter_anomalies,
-                "total_count": len(latency_anomalies) + len(packet_loss_anomalies) + 
-                               len(switch_time_anomalies) + len(jitter_anomalies)
+                "total_count": len(latency_anomalies)
+                + len(packet_loss_anomalies)
+                + len(switch_time_anomalies)
+                + len(jitter_anomalies),
             },
             "forecasts": {
                 "bandwidth": bandwidth_forecasts,
-                "latency": latency_forecasts
+                "latency": latency_forecasts,
             },
             "correlations": correlations,
-            "network_status": network_status
+            "network_status": network_status,
         }
 
     def _evaluate_network_status(self, traffic_data: Sequence[Traffic]) -> dict:
         """Оценивает общее состояние сети на основе метрик трафика.
-        
+
         Args:
             traffic_data: Данные о трафике.
-            
+
         Returns:
             Словарь с оценкой состояния сети.
         """
@@ -352,36 +376,38 @@ class TrafficAnalyzer:
             return {
                 "status": NetworkStatus.DEGRADED,
                 "message": "Нет данных для анализа",
-                "score": 0
+                "score": 0,
             }
         node_scores = {}
         for node_id in {t.node_id for t in traffic_data}:
             node_traffic = sorted(
                 [t for t in traffic_data if t.node_id == node_id],
-                key=lambda x: x.timestamp
+                key=lambda x: x.timestamp,
             )
             if not node_traffic:
                 continue
-                
+
             latest = node_traffic[-1]
             node_type = latest.node_type
             latency_score = min(
-                1.0, self.latency_thresholds[node_type] / max(latest.latency, 1)
+                1.0,
+                self.latency_thresholds[node_type] / max(latest.latency, 1),
             )
             packet_loss_score = min(
-                1.0, self.packet_loss_thresholds[node_type] / max(latest.packet_loss, 0.1)
+                1.0,
+                self.packet_loss_thresholds[node_type] / max(latest.packet_loss, 0.1),
             )
             utilization_score = 1.0 - min(1.0, latest.bandwidth / latest.capacity_mbps)
             switch_score = 1.0 - min(1.0, latest.switch_time / (self.switch_time_threshold * 2))
             node_scores[node_id] = {
-                "score": round((latency_score * 0.3 + packet_loss_score * 0.3 + 
-                              utilization_score * 0.25 + switch_score * 0.15) * 100, 1),
-                "type": node_type
+                "score": round(
+                    (latency_score * 0.3 + packet_loss_score * 0.3 + utilization_score * 0.25 + switch_score * 0.15)
+                    * 100,
+                    1,
+                ),
+                "type": node_type,
             }
-        if not node_scores:
-            avg_score = 0
-        else:
-            avg_score = sum(n["score"] for n in node_scores.values()) / len(node_scores)
+        avg_score = 0 if not node_scores else sum(n["score"] for n in node_scores.values()) / len(node_scores)
         if avg_score >= 80:
             status = NetworkStatus.OPTIMAL
             message = "Сеть функционирует оптимально"
@@ -394,12 +420,12 @@ class TrafficAnalyzer:
         else:
             status = NetworkStatus.CRITICAL
             message = "Серьезные проблемы с сетью, нужны экстренные меры"
-            
+
         return {
             "status": status,
             "message": message,
             "score": round(avg_score, 1),
-            "node_scores": node_scores
+            "node_scores": node_scores,
         }
 
     async def get_detailed_node_analytics(self, node_id: str, minutes: int = 60) -> dict:
@@ -414,7 +440,7 @@ class TrafficAnalyzer:
         """
         query = select(Traffic).filter(
             Traffic.node_id == node_id,
-            Traffic.timestamp >= datetime.now(UTC) - timedelta(minutes=minutes)
+            Traffic.timestamp >= datetime.now(UTC) - timedelta(minutes=minutes),
         )
         result = await self.db.scalars(query)
         traffic_data = result.all()
@@ -429,7 +455,7 @@ class TrafficAnalyzer:
         packet_loss_values = [t.packet_loss for t in traffic_data]
         utilization_values = [t.bandwidth / t.capacity_mbps for t in traffic_data]
         jitter_values = [getattr(t, "jitter", 0) for t in traffic_data]
-        switch_time_values = [t.switch_time for t in traffic_data]
+        [t.switch_time for t in traffic_data]
         timestamps = [t.timestamp.isoformat() for t in traffic_data]
         avg_bandwidth = sum(bandwidth_values) / len(bandwidth_values)
         avg_latency = sum(latency_values) / len(latency_values)
@@ -469,9 +495,10 @@ class TrafficAnalyzer:
                 "from_node": t.switched_from,
                 "reason": t.switch_reason,
                 "time_sec": t.switch_time,
-                "packet_loss_percent": t.switch_packet_loss
+                "packet_loss_percent": t.switch_packet_loss,
             }
-            for t in traffic_data if t.switch_time > 0 and t.switched_from
+            for t in traffic_data
+            if t.switch_time > 0 and t.switched_from
         ]
         is_latency_anomaly = latest.latency > self.latency_thresholds[node_type] * self.anomaly_sensitivity
         is_packet_loss_anomaly = latest.packet_loss > self.packet_loss_thresholds[node_type] * self.anomaly_sensitivity
@@ -487,7 +514,12 @@ class TrafficAnalyzer:
         else:
             status = NetworkStatus.CRITICAL
         optimization_suggestions = self._generate_node_optimization_suggestions(
-            node_id, node_type, latest, is_latency_anomaly, is_packet_loss_anomaly, is_utilization_anomaly
+            node_id,
+            node_type,
+            latest,
+            is_latency_anomaly,
+            is_packet_loss_anomaly,
+            is_utilization_anomaly,
         )
 
         return {
@@ -504,7 +536,7 @@ class TrafficAnalyzer:
                 "jitter_ms": round(getattr(latest, "jitter", 0), 2),
                 "utilization_percent": round(latest.bandwidth / latest.capacity_mbps * 100, 2),
                 "capacity_mbps": round(latest.capacity_mbps, 2),
-                "timestamp": latest.timestamp.isoformat()
+                "timestamp": latest.timestamp.isoformat(),
             },
             "average_metrics": {
                 "bandwidth_mbps": round(avg_bandwidth, 2),
@@ -512,35 +544,35 @@ class TrafficAnalyzer:
                 "packet_loss_percent": round(avg_packet_loss, 2),
                 "jitter_ms": round(avg_jitter, 2),
                 "utilization_percent": round(avg_utilization * 100, 2),
-                "max_utilization_percent": round(max_utilization * 100, 2)
+                "max_utilization_percent": round(max_utilization * 100, 2),
             },
             "variability": {
                 "bandwidth_std": round(std_bandwidth, 2),
                 "latency_std": round(std_latency, 2),
                 "packet_loss_std": round(std_packet_loss, 2),
-                "jitter_std": round(std_jitter, 2)
+                "jitter_std": round(std_jitter, 2),
             },
             "trends": {
                 "bandwidth": round(float(bandwidth_trend), 4),
                 "latency": round(float(latency_trend), 4),
-                "packet_loss": round(float(packet_loss_trend), 4)
+                "packet_loss": round(float(packet_loss_trend), 4),
             },
             "forecasts": {
                 "bandwidth_mbps": round(bandwidth_forecast, 2),
-                "latency_ms": round(latency_forecast, 2)
+                "latency_ms": round(latency_forecast, 2),
             },
             "time_series": {
                 "timestamps": timestamps,
                 "bandwidth_mbps": [round(bw, 2) for bw in bandwidth_values],
                 "latency_ms": [round(lat, 2) for lat in latency_values],
                 "packet_loss_percent": [round(pl, 2) for pl in packet_loss_values],
-                "utilization_percent": [round(util * 100, 2) for util in utilization_values]
+                "utilization_percent": [round(util * 100, 2) for util in utilization_values],
             },
             "anomalies": {
                 "latency": is_latency_anomaly,
                 "packet_loss": is_packet_loss_anomaly,
                 "utilization": is_utilization_anomaly,
-                "jitter": is_jitter_anomaly
+                "jitter": is_jitter_anomaly,
             },
             "switch_events": switch_events,
             "optimization_suggestions": optimization_suggestions,
@@ -548,16 +580,16 @@ class TrafficAnalyzer:
                 "latency_ms": self.latency_thresholds[node_type],
                 "packet_loss_percent": self.packet_loss_thresholds[node_type],
                 "high_utilization_percent": round(self.utilization_threshold_high * 100, 2),
-                "low_utilization_percent": round(self.utilization_threshold_low * 100, 2)
-            }
+                "low_utilization_percent": round(self.utilization_threshold_low * 100, 2),
+            },
         }
 
     def _calculate_node_score(self, node_traffic: Traffic) -> dict:
         """Рассчитывает оценку производительности узла.
-        
+
         Args:
             node_traffic: Данные о трафике узла.
-            
+
         Returns:
             Словарь с оценкой и составляющими.
         """
@@ -566,26 +598,29 @@ class TrafficAnalyzer:
         packet_loss_score = min(1.0, self.packet_loss_thresholds[node_type] / max(node_traffic.packet_loss, 0.1))
         utilization_score = 1.0 - min(1.0, node_traffic.bandwidth / node_traffic.capacity_mbps)
         switch_score = 1.0 - min(1.0, node_traffic.switch_time / (self.switch_time_threshold * 2))
-        score = (latency_score * 0.3 + packet_loss_score * 0.3 + 
-                 utilization_score * 0.25 + switch_score * 0.15) * 100
-                 
+        score = (latency_score * 0.3 + packet_loss_score * 0.3 + utilization_score * 0.25 + switch_score * 0.15) * 100
+
         return {
             "score": round(score, 1),
             "components": {
                 "latency": round(latency_score * 100, 1),
                 "packet_loss": round(packet_loss_score * 100, 1),
                 "utilization": round(utilization_score * 100, 1),
-                "switch_time": round(switch_score * 100, 1)
-            }
+                "switch_time": round(switch_score * 100, 1),
+            },
         }
-        
+
     def _generate_node_optimization_suggestions(
-        self, node_id: str, node_type: str, 
-        latest: Traffic, is_latency_anomaly: bool, 
-        is_packet_loss_anomaly: bool, is_utilization_anomaly: bool
+        self,
+        node_id: str,
+        node_type: str,
+        latest: Traffic,
+        is_latency_anomaly: bool,
+        is_packet_loss_anomaly: bool,
+        is_utilization_anomaly: bool,
     ) -> list[dict]:
         """Генерирует предложения по оптимизации узла.
-        
+
         Args:
             node_id: ID узла.
             node_type: Тип узла.
@@ -593,69 +628,75 @@ class TrafficAnalyzer:
             is_latency_anomaly: Флаг аномалии задержки.
             is_packet_loss_anomaly: Флаг аномалии потери пакетов.
             is_utilization_anomaly: Флаг аномалии утилизации.
-            
+
         Returns:
             Список предложений по оптимизации.
         """
         suggestions = []
         utilization = latest.bandwidth / latest.capacity_mbps
         if is_utilization_anomaly or utilization > self.utilization_threshold_high:
-            suggestions.append({
-                "type": "load_balancing",
-                "priority": "high",
-                "description": f"Перенаправить часть трафика с перегруженного узла {node_id} (загрузка: {utilization:.2%})",
-                "estimated_improvement": "10-30% снижение загрузки",
-                "implementation": "Настроить балансировщик для перенаправления трафика на менее загруженные узлы"
-            })
+            suggestions.append(
+                {
+                    "type": "load_balancing",
+                    "priority": "high",
+                    "description": f"Перенаправить часть трафика с перегруженного узла {node_id} (загрузка: {utilization:.2%})",
+                    "estimated_improvement": "10-30% снижение загрузки",
+                    "implementation": "Настроить балансировщик для перенаправления трафика на менее загруженные узлы",
+                },
+            )
         if is_latency_anomaly:
-            suggestions.append({
-                "type": "qos_config",
-                "priority": "medium",
-                "description": f"Оптимизировать QoS для узла {node_id} с высокой задержкой ({latest.latency:.2f} мс)",
-                "estimated_improvement": "20-40% снижение задержки для критического трафика",
-                "implementation": "Приоритизировать чувствительный к задержке трафик через механизмы QoS"
-            })
+            suggestions.append(
+                {
+                    "type": "qos_config",
+                    "priority": "medium",
+                    "description": f"Оптимизировать QoS для узла {node_id} с высокой задержкой ({latest.latency:.2f} мс)",
+                    "estimated_improvement": "20-40% снижение задержки для критического трафика",
+                    "implementation": "Приоритизировать чувствительный к задержке трафик через механизмы QoS",
+                },
+            )
         if is_packet_loss_anomaly:
-            suggestions.append({
-                "type": "error_correction",
-                "priority": "high",
-                "description": f"Включить механизмы коррекции ошибок для узла {node_id} ({latest.packet_loss:.2f}%)",
-                "estimated_improvement": "50-70% снижение потери пакетов",
-                "implementation": "Настроить FEC (Forward Error Correction) или повторную отправку пакетов"
-            })
+            suggestions.append(
+                {
+                    "type": "error_correction",
+                    "priority": "high",
+                    "description": f"Включить механизмы коррекции ошибок для узла {node_id} ({latest.packet_loss:.2f}%)",
+                    "estimated_improvement": "50-70% снижение потери пакетов",
+                    "implementation": "Настроить FEC (Forward Error Correction) или повторную отправку пакетов",
+                },
+            )
         if node_type == "satellite" and latest.latency > 300:
-            suggestions.append({
-                "type": "cache_config",
-                "priority": "medium",
-                "description": "Настроить локальное кэширование для снижения влияния высокой задержки",
-                "estimated_improvement": "30-50% улучшение пользовательского опыта",
-                "implementation": "Добавить прокси-сервер с кэшированием часто запрашиваемого контента"
-            })
+            suggestions.append(
+                {
+                    "type": "cache_config",
+                    "priority": "medium",
+                    "description": "Настроить локальное кэширование для снижения влияния высокой задержки",
+                    "estimated_improvement": "30-50% улучшение пользовательского опыта",
+                    "implementation": "Добавить прокси-сервер с кэшированием часто запрашиваемого контента",
+                },
+            )
         if node_type == "5G" and is_latency_anomaly:
-            suggestions.append({
-                "type": "hybrid_routing",
-                "priority": "medium",
-                "description": "Использовать гибридную маршрутизацию для чувствительного к задержке трафика",
-                "estimated_improvement": "20-30% снижение задержки для VoIP/видео",
-                "implementation": "Настроить правила маршрутизации для перенаправления критичного трафика через fiber-узлы"
-            })
-            
+            suggestions.append(
+                {
+                    "type": "hybrid_routing",
+                    "priority": "medium",
+                    "description": "Использовать гибридную маршрутизацию для чувствительного к задержке трафика",
+                    "estimated_improvement": "20-30% снижение задержки для VoIP/видео",
+                    "implementation": "Настроить правила маршрутизации для перенаправления критичного трафика через fiber-узлы",
+                },
+            )
+
         return suggestions
 
     async def get_network_topology(self) -> dict:
         """Получает топологию сети с информацией о связях между узлами.
-        
+
         Returns:
             Словарь с описанием топологии сети.
         """
-        query = (
-            select(Traffic)
-            .distinct(Traffic.node_id)
-            .order_by(Traffic.node_id, Traffic.timestamp.desc())
-        )
+        query = select(Traffic).distinct(Traffic.node_id).order_by(Traffic.node_id, Traffic.timestamp.desc())
         nodes_result = await self.db.scalars(query)
         nodes_data = nodes_result.all()
-        links_query = select(NetworkLink).filter(NetworkLink.is_active == True)
+        links_query = select(NetworkLink).filter(NetworkLink.is_active is True)
         links_result = await self.db.scalars(links_query)
         links_data = links_result.all()
         if not links_data:
@@ -663,71 +704,81 @@ class TrafficAnalyzer:
         nodes = []
         for node in nodes_data:
             node_score = self._calculate_node_score(node)
-            nodes.append({
-                "id": node.node_id,
-                "type": node.node_type,
-                "connections": [link.target_node for link in links_data if link.source_node == node.node_id],
-                "status": str(NetworkStatus.OPTIMAL) if node_score["score"] > 70 else 
-                           str(NetworkStatus.DEGRADED) if node_score["score"] > 50 else 
-                           str(NetworkStatus.CRITICAL),
-                "metrics": {
-                    "bandwidth": round(node.bandwidth, 2),
-                    "latency": round(node.latency, 2),
-                    "packet_loss": round(node.packet_loss, 2),
-                    "utilization": round(node.bandwidth / node.capacity_mbps, 2),
-                    "score": node_score["score"]
-                }
-            })
+            nodes.append(
+                {
+                    "id": node.node_id,
+                    "type": node.node_type,
+                    "connections": [link.target_node for link in links_data if link.source_node == node.node_id],
+                    "status": str(NetworkStatus.OPTIMAL)
+                    if node_score["score"] > 70
+                    else str(NetworkStatus.DEGRADED)
+                    if node_score["score"] > 50
+                    else str(NetworkStatus.CRITICAL),
+                    "metrics": {
+                        "bandwidth": round(node.bandwidth, 2),
+                        "latency": round(node.latency, 2),
+                        "packet_loss": round(node.packet_loss, 2),
+                        "utilization": round(node.bandwidth / node.capacity_mbps, 2),
+                        "score": node_score["score"],
+                    },
+                },
+            )
         links = []
         for link in links_data:
-            links.append({
-                "source": link.source_node,
-                "target": link.target_node,
-                "bandwidth": round(link.bandwidth, 2),
-                "latency": round(link.latency, 2),
-                "type": link.link_type,
-                "weight": link.weight
-            })
-        
+            links.append(
+                {
+                    "source": link.source_node,
+                    "target": link.target_node,
+                    "bandwidth": round(link.bandwidth, 2),
+                    "latency": round(link.latency, 2),
+                    "type": link.link_type,
+                    "weight": link.weight,
+                },
+            )
+
         return {
             "nodes": nodes,
             "links": links,
-            "timestamp": datetime.now(UTC).isoformat()
+            "timestamp": datetime.now(UTC).isoformat(),
         }
-        
+
     async def _generate_network_links(self, nodes_data: list[Traffic]) -> list:
         """Генерирует связи между узлами на основе данных о трафике.
-        
+
         Args:
             nodes_data: Данные о трафике на узлах.
-            
+
         Returns:
             Список сгенерированных связей.
         """
         links = []
-        node_ids = [node.node_id for node in nodes_data]
+        [node.node_id for node in nodes_data]
         for node in nodes_data:
             same_type_nodes = [n for n in nodes_data if n.node_type == node.node_type and n.node_id != node.node_id]
-            for target in same_type_nodes[:2]:  
-                links.append(NetworkLink(
-                    source_node=node.node_id,
-                    target_node=target.node_id,
-                    bandwidth=min(node.capacity_mbps, target.capacity_mbps) * 0.7,
-                    latency=(node.latency + target.latency) * 0.5,
-                    is_active=True,
-                    link_type=f"{node.node_type}-{target.node_type}",
-                    weight=1.0
-                ))
+            for target in same_type_nodes[:2]:
+                links.append(
+                    NetworkLink(
+                        source_node=node.node_id,
+                        target_node=target.node_id,
+                        bandwidth=min(node.capacity_mbps, target.capacity_mbps) * 0.7,
+                        latency=(node.latency + target.latency) * 0.5,
+                        is_active=True,
+                        link_type=f"{node.node_type}-{target.node_type}",
+                        weight=1.0,
+                    ),
+                )
             other_type_nodes = [n for n in nodes_data if n.node_type != node.node_type]
-            for target in other_type_nodes[:1]:  
-                links.append(NetworkLink(
-                    source_node=node.node_id,
-                    target_node=target.node_id,
-                    bandwidth=min(node.capacity_mbps, target.capacity_mbps) * 0.5,
-                    latency=(node.latency + target.latency) * 0.7,
-                    is_active=True,
-                    link_type=f"{node.node_type}-{target.node_type}",
-                    weight=1.5
-                ))
-                
+            for target in other_type_nodes[:1]:
+                links.append(
+                    NetworkLink(
+                        source_node=node.node_id,
+                        target_node=target.node_id,
+                        bandwidth=min(node.capacity_mbps, target.capacity_mbps) * 0.5,
+                        latency=(node.latency + target.latency) * 0.7,
+                        is_active=True,
+                        link_type=f"{node.node_type}-{target.node_type}",
+                        weight=1.5,
+                    ),
+                )
+
         return links

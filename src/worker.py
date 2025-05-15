@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-async def main():
+async def main() -> None:
     """Запускает периодический сбор данных о трафике."""
     logger.info("Starting traffic data collection")
     while True:
