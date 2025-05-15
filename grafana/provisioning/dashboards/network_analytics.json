@@ -324,8 +324,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "yellow",
@@ -570,8 +569,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -956,11 +954,12 @@
             "type": "postgres",
             "uid": "PostgreSQL"
           },
+          "editorMode": "code",
           "format": "time_series",
           "group": [],
           "metricColumn": "none",
           "rawQuery": true,
-          "rawSql": "SELECT\n  date_trunc('hour', created_at) as time,\n  'Nodes' as metric,\n  count(distinct node_id) as value\nFROM nodes\nWHERE $__timeFilter(created_at)\nGROUP BY 1\nORDER BY 1",
+          "rawSql": "SELECT\n  date_trunc('hour', created_at) as time,\n  'Nodes' as metric,\n  count(distinct node_id) as value\nFROM nodes\nGROUP BY 1\nORDER BY 1",
           "refId": "A",
           "select": [
             [
@@ -972,6 +971,23 @@
               }
             ]
           ],
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
           "timeColumn": "time",
           "where": [
             {
@@ -986,12 +1002,13 @@
             "type": "postgres",
             "uid": "PostgreSQL"
           },
+          "editorMode": "code",
           "format": "time_series",
           "group": [],
           "hide": false,
           "metricColumn": "none",
           "rawQuery": true,
-          "rawSql": "SELECT\n  date_trunc('hour', created_at) as time,\n  'Links' as metric,\n  count(*) as value\nFROM network_links\nWHERE $__timeFilter(created_at)\nGROUP BY 1\nORDER BY 1",
+          "rawSql": "SELECT\n  date_trunc('hour', created_at) as time,\n  'Links' as metric,\n  count(*) as value\nFROM network_links\nGROUP BY 1\nORDER BY 1",
           "refId": "B",
           "select": [
             [
@@ -1003,6 +1020,23 @@
               }
             ]
           ],
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
           "timeColumn": "time",
           "where": [
             {
@@ -1017,12 +1051,13 @@
             "type": "postgres",
             "uid": "PostgreSQL"
           },
+          "editorMode": "code",
           "format": "time_series",
           "group": [],
           "hide": false,
           "metricColumn": "none",
           "rawQuery": true,
-          "rawSql": "SELECT\n  date_trunc('hour', created_at) as time,\n  'Hybrid Links' as metric,\n  count(*) as value\nFROM network_links\nWHERE link_type LIKE '%-%' AND link_type NOT LIKE '%-%-%' AND $__timeFilter(created_at)\nGROUP BY 1\nORDER BY 1",
+          "rawSql": "SELECT\n  date_trunc('hour', created_at) as time,\n  'Hybrid Links' as metric,\n  count(*) as value\nFROM network_links\nWHERE link_type LIKE '%-%' AND link_type NOT LIKE '%-%-%'\nGROUP BY 1\nORDER BY 1",
           "refId": "C",
           "select": [
             [
@@ -1034,6 +1069,23 @@
               }
             ]
           ],
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
           "timeColumn": "time",
           "where": [
             {
@@ -1077,6 +1129,6 @@
   "timezone": "",
   "title": "Network Analytics",
   "uid": "network_analytics",
-  "version": 6,
+  "version": 1,
   "weekStart": ""
 }
