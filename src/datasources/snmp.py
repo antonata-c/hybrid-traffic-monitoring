@@ -165,7 +165,7 @@ class SNMPDataSource(DataSource):
             logger.info(f"Созданы узлы из настроек: {nodes}")
             return nodes
 
-        query = select(Node).filter(Node.is_active is True)
+        query = select(Node).filter(Node.is_active == True)
         result = await self.db.scalars(query)
         nodes = result.all()
 

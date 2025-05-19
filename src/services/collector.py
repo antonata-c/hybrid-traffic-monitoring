@@ -28,16 +28,21 @@ class TrafficCollector:
         self.last_optimization_update = None
 
     def _initialize_data_sources(self) -> dict[str, DataSource]:
-        """Инициализирует все доступные источники данных с передачей сессии базы данных.
+        """Инициализирует только выбранный в настройках источник данных с передачей сессии базы данных.
 
         Returns:
-            Словарь с инициализированными источниками данных.
+            Словарь с инициализированным источником данных.
         """
-        return {
-            "calculated": CalculatedDataSource(db=self.db),
-            "dataset": DatasetDataSource(db=self.db),
-            "network": SNMPDataSource(db=self.db),
-        }
+        source_name = settings.DATA_SOURCE
+        if source_name == "calculated":
+            return {"calculated": CalculatedDataSource(db=self.db)}
+        elif source_name == "dataset":
+            return {"dataset": DatasetDataSource(db=self.db)}
+        elif source_name == "network":
+            return {"network": SNMPDataSource(db=self.db)}
+        else:
+            logger.warning(f"Неизвестный источник данных: {source_name}, используем calculated по умолчанию")
+            return {"calculated": CalculatedDataSource(db=self.db)}
 
     def _get_data_source(self, source_name: str | None = None) -> DataSource:
         """Возвращает источник данных на основе конфигурации или переданного имени.
@@ -57,7 +62,7 @@ class TrafficCollector:
         raise ValueError(f"Неизвестный источник данных: {source}")
 
     async def collect_data(self) -> None:
-        """Собирает и сохраняет данные о трафике из всех настроенных источников."""
+        """Собирает и сохраняет данные о трафике из настроенного источника."""
         try:
             current_time = datetime.now(UTC)
 
@@ -81,32 +86,12 @@ class TrafficCollector:
 
             node_ids = [node["node_id"] for node in nodes]
 
-            primary_data = await self._collect_from_source(self.primary_source, node_ids, current_time)
-
-            collected_nodes = {entry["node_id"] for entry in primary_data}
-            missing_nodes = [node_id for node_id in node_ids if node_id not in collected_nodes]
-
-            backup_data = []
-            if missing_nodes:
-                logger.warning(f"Отсутствуют данные для узлов: {missing_nodes}")
-                for source_name in self.data_sources:
-                    if source_name == self.primary_source:
-                        continue
-
-                    backup_source_data = await self._collect_from_source(
-                        source_name,
-                        missing_nodes,
-                        current_time,
-                    )
-                    backup_data.extend(backup_source_data)
-
-                    backup_collected = {entry["node_id"] for entry in backup_source_data}
-                    missing_nodes = [node_id for node_id in missing_nodes if node_id not in backup_collected]
-
-                    if not missing_nodes:
-                        break
-
-            all_data = primary_data + backup_data
+            # Используем только выбранный источник данных
+            all_data = await self._collect_from_source(self.primary_source, node_ids, current_time)
+            
+            if not all_data:
+                logger.warning(f"Не удалось получить данные из источника {self.primary_source}")
+                return
 
             for entry in all_data:
                 entry.pop("data_source", None)
@@ -135,7 +120,7 @@ class TrafficCollector:
             Список словарей с информацией об узлах.
         """
         try:
-            query = select(Node).filter(Node.is_active is True)
+            query = select(Node).filter(Node.is_active == True)  # Исправлена ошибка: is True -> == True
             result = await self.db.scalars(query)
             nodes = result.all()
 
@@ -230,9 +215,9 @@ class TrafficCollector:
             node_id = entry["node_id"]
             node_type = entry["node_type"]
 
-            node_query = text(f"SELECT id FROM nodes WHERE node_id = '{node_id}'")
-            result = await self.db.execute(node_query)
-            existing_node = result.scalar_one_or_none()
+            # Используем параметризованный запрос вместо строковой интерполяции
+            node_query = select(Node).filter(Node.node_id == node_id)
+            existing_node = await self.db.scalar(node_query)
 
             if not existing_node:
                 node = Node(
@@ -260,13 +245,12 @@ class TrafficCollector:
                     for i, source in enumerate(nodes):
                         for j, target in enumerate(nodes):
                             if i != j:
-                                link_query = text(
-                                    f"SELECT id FROM network_links WHERE "
-                                    f"source_node = '{source['node_id']}' AND "
-                                    f"target_node = '{target['node_id']}'",
+                                # Используем параметризованный запрос вместо строковой интерполяции
+                                link_query = select(NetworkLink).filter(
+                                    NetworkLink.source_node == source['node_id'],
+                                    NetworkLink.target_node == target['node_id']
                                 )
-                                result = await self.db.execute(link_query)
-                                existing_link = result.scalar_one_or_none()
+                                existing_link = await self.db.scalar(link_query)
 
                                 if not existing_link:
                                     link = NetworkLink(
@@ -294,13 +278,12 @@ class TrafficCollector:
                         source = representative_nodes[type1]
                         target = representative_nodes[type2]
 
-                        link_query = text(
-                            f"SELECT id FROM network_links WHERE "
-                            f"(source_node = '{source['node_id']}' AND target_node = '{target['node_id']}') OR "
-                            f"(source_node = '{target['node_id']}' AND target_node = '{source['node_id']}')",
+                        # Используем параметризованный запрос вместо строковой интерполяции
+                        link_query = select(NetworkLink).filter(
+                            ((NetworkLink.source_node == source['node_id']) & (NetworkLink.target_node == target['node_id'])) |
+                            ((NetworkLink.source_node == target['node_id']) & (NetworkLink.target_node == source['node_id']))
                         )
-                        result = await self.db.execute(link_query)
-                        existing_link = result.scalar_one_or_none()
+                        existing_link = await self.db.scalar(link_query)
 
                         if not existing_link:
                             hybrid_link = NetworkLink(

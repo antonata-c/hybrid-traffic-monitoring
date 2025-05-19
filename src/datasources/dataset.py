@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -163,7 +163,7 @@ class DatasetDataSource(DataSource):
             logger.info(f"Созданы узлы из настроек: {nodes}")
             return nodes
 
-        query = select(Node).filter(Node.is_active is True)
+        query = select(Node).filter(Node.is_active == True)
         result = await self.db.scalars(query)
         nodes = result.all()
 
@@ -422,8 +422,8 @@ class DatasetDataSource(DataSource):
             or (current_time - self.last_optimizations_check).total_seconds() > 300
         ):
             query = select(OptimizationAction).filter(
-                OptimizationAction.is_active is True,
-                (OptimizationAction.effective_until is None) | (OptimizationAction.effective_until > current_time),
+                OptimizationAction.is_active == True,
+                or_(OptimizationAction.effective_until.is_(None), OptimizationAction.effective_until > current_time),
             )
             result = await self.db.scalars(query)
             optimizations = result.all()

@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -146,7 +146,7 @@ class CalculatedDataSource(DataSource):
             logger.info(f"Созданы узлы из настроек: {nodes}")
             return nodes
 
-        query = select(Node).filter(Node.is_active is True)
+        query = select(Node).filter(Node.is_active == True)
         result = await self.db.scalars(query)
         nodes = result.all()
 
@@ -216,8 +216,8 @@ class CalculatedDataSource(DataSource):
             or (current_time - self.last_optimizations_check).total_seconds() > 300
         ):
             query = select(OptimizationAction).filter(
-                OptimizationAction.is_active is True,
-                (OptimizationAction.effective_until is None) | (OptimizationAction.effective_until > current_time),
+                OptimizationAction.is_active == True,
+                or_(OptimizationAction.effective_until.is_(None), OptimizationAction.effective_until > current_time),
             )
             result = await self.db.scalars(query)
             optimizations = result.all()
@@ -327,51 +327,51 @@ class CalculatedDataSource(DataSource):
                     error_rate = None
 
                 switch_probability = 0.05
-            switched_from = None
-            switch_reason = None
-            switch_time = 0.0
-            switch_packet_loss = 0.0
+                switched_from = None
+                switch_reason = None
+                switch_time = 0.0
+                switch_packet_loss = 0.0
 
-            if np.random.random() < switch_probability:
-                other_nodes = [n for n in target_nodes if n["node_id"] != node_id]
-                if other_nodes:
-                    source_node = np.random.choice(other_nodes)
-                    switched_from = source_node["node_id"]
+                if np.random.random() < switch_probability:
+                    other_nodes = [n for n in target_nodes if n["node_id"] != node_id]
+                    if other_nodes:
+                        source_node = np.random.choice(other_nodes)
+                        switched_from = source_node["node_id"]
 
-                    # Разные причины переключения в зависимости от метрик и случайных факторов
-                    if utilization > 0.8:
-                        switch_reason = "Высокая загрузка канала"
-                    elif latency > params["base_latency"] * 2:
-                        switch_reason = "Высокая задержка"
-                    elif packet_loss > params["base_packet_loss"] * 3:
-                        switch_reason = "Высокие потери пакетов"
-                    elif jitter > params["jitter"] * 2:
-                        switch_reason = "Высокий джиттер"
-                    elif (
-                        node_type in [NodeType.satellite, NodeType.microwave, NodeType.starlink]
-                        and np.random.random() < 0.4
-                    ):
-                        switch_reason = "Проблемы с сигналом"
-                    elif node_type == NodeType.gen5 and np.random.random() < 0.3:
-                        switch_reason = "Интерференция сигнала"
-                    elif np.random.random() < 0.3:
-                        switch_reason = "Плановое переключение"
-                    elif np.random.random() < 0.2:
-                        switch_reason = "Техническое обслуживание"
-                    else:
-                        switch_reason = "Оптимизация маршрута"
+                        # Разные причины переключения в зависимости от метрик и случайных факторов
+                        if utilization > 0.8:
+                            switch_reason = "Высокая загрузка канала"
+                        elif latency > params["base_latency"] * 2:
+                            switch_reason = "Высокая задержка"
+                        elif packet_loss > params["base_packet_loss"] * 3:
+                            switch_reason = "Высокие потери пакетов"
+                        elif jitter > params["jitter"] * 2:
+                            switch_reason = "Высокий джиттер"
+                        elif (
+                            node_type in [NodeType.satellite, NodeType.microwave, NodeType.starlink]
+                            and np.random.random() < 0.4
+                        ):
+                            switch_reason = "Проблемы с сигналом"
+                        elif node_type == NodeType.gen5 and np.random.random() < 0.3:
+                            switch_reason = "Интерференция сигнала"
+                        elif np.random.random() < 0.3:
+                            switch_reason = "Плановое переключение"
+                        elif np.random.random() < 0.2:
+                            switch_reason = "Техническое обслуживание"
+                        else:
+                            switch_reason = "Оптимизация маршрута"
 
-                    # Время переключения и потери пакетов зависят от типа узла и причины переключения
-                    base_switch_time = params["switch_time"]
-                    base_packet_loss = params["switch_loss"]
+                        # Время переключения и потери пакетов зависят от типа узла и причины переключения
+                        base_switch_time = params["switch_time"]
+                        base_packet_loss = params["switch_loss"]
 
-                    # Увеличиваем значения при проблемах
-                    if "Высок" in switch_reason or "Проблем" in switch_reason or "Интерференция" in switch_reason:
-                        switch_time = base_switch_time * np.random.uniform(1.2, 2.0)
-                        switch_packet_loss = base_packet_loss * np.random.uniform(1.5, 2.5)
-                    else:
-                        switch_time = base_switch_time * np.random.uniform(0.8, 1.2)
-                        switch_packet_loss = base_packet_loss * np.random.uniform(0.8, 1.2)
+                        # Увеличиваем значения при проблемах
+                        if "Высок" in switch_reason or "Проблем" in switch_reason or "Интерференция" in switch_reason:
+                            switch_time = base_switch_time * np.random.uniform(1.2, 2.0)
+                            switch_packet_loss = base_packet_loss * np.random.uniform(1.5, 2.5)
+                        else:
+                            switch_time = base_switch_time * np.random.uniform(0.8, 1.2)
+                            switch_packet_loss = base_packet_loss * np.random.uniform(0.8, 1.2)
 
                 metrics = {
                     "node_id": node_id,
